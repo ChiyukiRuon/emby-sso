@@ -39,6 +39,9 @@ public sealed class TestService(IUserManager users) : IService, IRequiresRequest
         if (string.IsNullOrEmpty(secret) || !Secrets.Equal(Request.Headers["X-Test-Secret"] ?? "", secret))
             throw new UnauthorizedAccessException();
         var plugin = Plugin.Instance;
+        // Independent test phases must not share production rate-limit counters.
+        typeof(Plugin).GetField("<Limiter>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(plugin, new RateLimiter());
         plugin.Configuration.Enabled = true;
         plugin.Configuration.AllowInsecureHttp =
             Environment.GetEnvironmentVariable("EMBY_SSO_ALLOW_INSECURE_HTTP") == "1";

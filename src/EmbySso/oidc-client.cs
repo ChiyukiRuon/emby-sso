@@ -7,7 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace EmbySso;
 
 public sealed record Identity(string Issuer, string Subject, string Username);
-public sealed record OidcFlow(Configuration Configuration, string Nonce, string Verifier, string? LinkUserId);
+public sealed record OidcFlow(Configuration Configuration, string Nonce, string Verifier, string? LinkUserId, bool ClientCode = false);
 public sealed record Discovery(string Issuer, string AuthorizationEndpoint, string TokenEndpoint, string JwksUri);
 
 public sealed class OidcClient(HttpClient http)

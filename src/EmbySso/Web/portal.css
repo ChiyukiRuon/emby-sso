@@ -14,6 +14,8 @@ button.secondary { background: #28392e; color: #d5e7dc; }
 details { border-top: 1px solid #344339; padding: 20px 0 4px; }
 summary { cursor: pointer; padding: 5px 0; }
 a { color: #a4ddb5; text-underline-offset: 4px; }
+#login-code { font-variant-numeric: tabular-nums; letter-spacing: .08em; color: #e9efeb; }
+strong { overflow-wrap: anywhere; }
 .footnote { margin-top: 28px; font-size: .85rem; }
 .confirmation { display: flex; align-items: center; }
 .confirmation input { width: 18px; min-height: 18px; }

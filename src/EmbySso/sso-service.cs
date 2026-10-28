@@ -23,6 +23,7 @@ public sealed class SsoService : IService, IHasResultFactory
     private readonly EmbyGateway gateway;
     private readonly Accounts accounts;
     private readonly string appVersion;
+    private readonly CodeAuthenticationProvider codeProvider;
     public IRequest Request { get; set; } = null!;
     public IHttpResultFactory ResultFactory { get; set; } = null!;
 
@@ -30,6 +31,7 @@ public sealed class SsoService : IService, IHasResultFactory
         IHttpResultFactory resultFactory, IApplicationHost appHost, IAuthorizationContext authorization)
     {
         this.users = users;
+        codeProvider = new CodeAuthenticationProvider(appHost, users);
         this.authorization = authorization;
         this.sessions = sessions;
         ResultFactory = resultFactory;
@@ -53,7 +55,7 @@ public sealed class SsoService : IService, IHasResultFactory
 
     public object Get(AssetRequest request) => Guard(() =>
     {
-        if (request.Name is not ("portal.js" or "finish.js" or "portal.css" or "entry.js"))
+        if (request.Name is not ("portal.js" or "finish.js" or "portal.css" or "entry.js" or "client-code.js"))
             throw new SsoException("资源不存在。");
         Headers();
         return Content(Resource(request.Name), request.Name.EndsWith(".css", StringComparison.Ordinal) ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8");
@@ -67,8 +69,8 @@ public sealed class SsoService : IService, IHasResultFactory
         plugin.Limiter.Check("start:" + Request.RemoteIp);
         var fingerprint = plugin.Forms.Take(Bounded(request.Csrf, 128), browser);
         if (fingerprint != config.Fingerprint) throw new SsoException("配置已改变，请重新打开登录页。");
-        if (request.Action != "login") throw new SsoException("请在个人配置页面管理 SSO 绑定。");
-        var flow = new OidcFlow(config, Secrets.Random(), Secrets.Random(), null);
+        if (request.Action is not ("login" or "client-code")) throw new SsoException("请在个人配置页面管理 SSO 绑定。");
+        var flow = new OidcFlow(config, Secrets.Random(), Secrets.Random(), null, request.Action == "client-code");
         var state = plugin.Flows.Add(browser, flow);
         var url = await plugin.Oidc.AuthorizationUrl(flow, state, Request.CancellationToken);
         Headers();
@@ -94,6 +96,25 @@ public sealed class SsoService : IService, IHasResultFactory
         {
             Headers();
             return ResultFactory.GetRedirectResult(config.PublicUrl.TrimEnd('/') + "/web/index.html#!/settings/profile.html?userId=" + account.Id);
+        }
+        if (flow.ClientCode)
+        {
+            var user = users.GetUserById(account.Id);
+            var policy = users.GetUserPolicy(user);
+            if (!policy.EnableRemoteAccess)
+                throw new SsoException("此账号未允许远程访问，不能生成客户端登录码。");
+            if (!string.IsNullOrEmpty(policy.AuthenticationProviderId)
+                && policy.AuthenticationProviderId != CodeAuthenticationProvider.DefaultProviderId
+                && policy.AuthenticationProviderId != CodeAuthenticationProvider.ProviderId)
+                throw new SsoException("此账号使用其他认证提供器，不能启用客户端登录码。");
+            plugin.Limiter.Check("issue-code:" + account.Id, 10);
+            if (policy.AuthenticationProviderId != CodeAuthenticationProvider.ProviderId)
+            {
+                policy.AuthenticationProviderId = CodeAuthenticationProvider.ProviderId;
+                users.UpdateUserPolicy(user.InternalId, policy);
+            }
+            var loginCode = plugin.LoginCodes.Issue(account.Id, config.Fingerprint);
+            return Page("client-code.html", config, new { username = account.Name, loginCode });
         }
         var ticket = plugin.Sessions.Add(browser, new SessionTicket(account.Id, config.Fingerprint), TimeSpan.FromSeconds(60));
         return Page("finish.html", config, new { ticket, publicUrl = config.PublicUrl.TrimEnd('/') });
@@ -186,14 +207,20 @@ public sealed class SsoService : IService, IHasResultFactory
         var password = Bounded(request.Password, 1024);
         if (password.Length == 0) throw new SsoException("请输入 Emby 本地密码。");
         plugin.Limiter.Check("password:" + Secrets.Hash(account.Name.ToUpperInvariant()), 10);
-        var verified = await users.AuthenticateUser(account.Name, password, true, Request.CancellationToken);
-        if (verified == null || EmbyGateway.Describe(verified).Id != account.Id)
+        try
+        {
+            await codeProvider.AuthenticateLocal(account.Name, password, users.GetUserById(account.Id));
+        }
+        catch
+        {
             throw new SsoException("账号验证失败。");
+        }
         gateway.AssertAllowed(account);
         Headers();
         if (request.Action == "unlink")
         {
             await accounts.Unbind(config.Issuer, account);
+            plugin.LoginCodes.Revoke(account.Id);
             return Content("{\"unlinked\":true}", "application/json; charset=utf-8");
         }
         var flow = new OidcFlow(config, Secrets.Random(), Secrets.Random(), account.Id);

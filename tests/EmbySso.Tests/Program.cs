@@ -35,6 +35,43 @@ string Token(Dictionary<string, object>? changes = null, SecurityKey? signingKey
     return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
     { Claims = claims, SigningCredentials = new SigningCredentials(signingKey ?? key, algorithm) });
 }
+Test("login codes are account bound, single use and replaced on reissue", () =>
+{
+    var codes = new LoginCodes();
+    var first = codes.Issue("alice", "config");
+    Assert(first.Length == 6 && first.All(char.IsAsciiDigit));
+    Assert(!codes.Take("bob", first, "config"));
+    Assert(!codes.Take("alice", "bad", "config"));
+    var second = codes.Issue("alice", "config");
+    Assert(!codes.Take("alice", first, "config"));
+    Assert(codes.Take("alice", second, "config"));
+    Assert(!codes.Take("alice", second, "config"));
+});
+Test("revoked login codes cannot be redeemed", () =>
+{
+    var codes = new LoginCodes();
+    var code = codes.Issue("alice", "config");
+    codes.Revoke("alice");
+    Assert(!codes.Take("alice", code, "config"));
+});
+Test("login codes expire and configuration changes invalidate them", () =>
+{
+    var clock = new TestClock();
+    var codes = new LoginCodes(clock);
+    var code = codes.Issue("alice", "old");
+    Assert(!codes.Take("alice", code, "new"));
+    Assert(!codes.Take("alice", code, "old"));
+    code = codes.Issue("alice", "old");
+    clock.Advance(TimeSpan.FromMinutes(5));
+    Assert(!codes.Take("alice", code, "old"));
+});
+AsyncTest("concurrent login code redemption succeeds only once", async () =>
+{
+    var codes = new LoginCodes();
+    var code = codes.Issue("alice", "config");
+    var results = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => Task.Run(() => codes.Take("alice", code, "config"))));
+    Assert(results.Count(success => success) == 1);
+});
 Test("PKCE S256 RFC 7636 vector", () => Assert(Secrets.Hash("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"));
 Test("exact issuer and subpath survive config snapshot", () =>
 {

@@ -21,6 +21,7 @@ public sealed class Plugin : BasePlugin<Configuration>, IHasWebPages, IServerEnt
     public TicketStore<string> Forms { get; } = new();
     public TicketStore<OidcFlow> Flows { get; } = new();
     public TicketStore<SessionTicket> Sessions { get; } = new();
+    public LoginCodes LoginCodes { get; } = new();
     public RateLimiter Limiter { get; } = new();
     public OidcClient Oidc { get; }
     public Accounts? Accounts { get; set; }

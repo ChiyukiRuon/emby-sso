@@ -194,6 +194,23 @@ function authenticateAdmin() {
       await route.fulfill({ status: 302, headers: { location: callback.toString() } })
     })
 
+    await page.goto(publicUrl + '/sso', { waitUntil: 'domcontentloaded' })
+    await page.locator('form').filter({ has: page.locator('input[value="client-code"]') }).locator('button').click()
+    await page.waitForFunction(() => /^\d{6}$/.test(document.getElementById('login-code')?.textContent || ''))
+    if (await page.locator('#username').textContent() !== subject) throw new Error('Wrong client code account')
+    if (new URL(page.url()).search) throw new Error('OIDC callback parameters remain in URL')
+    const clientCode = await page.locator('#login-code').textContent()
+    const codeResponse = await context.request.post(publicUrl + '/Users/AuthenticateByName', {
+        headers: { 'X-Emby-Authorization': 'MediaBrowser Client="BrowserCodeTest", Device="TV", DeviceId="browser-code-tv", Version="1.0"' },
+        data: { Username: subject, Pw: clientCode }
+    })
+    if (!codeResponse.ok() || !(await codeResponse.json()).AccessToken) throw new Error('Browser code failed native login')
+    fs.mkdirSync(path.join(__dirname, '../../artifacts/screenshots'), { recursive: true })
+    await page.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/client-code-desktop.png'), animations: 'disabled' })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/client-code-mobile.png'), animations: 'disabled' })
+    await page.setViewportSize({ width: 1280, height: 720 })
+    console.log('PASS browser: client code flow, clean callback URL, native password login')
     const sessionResponse = page.waitForResponse(
       (response) => response.url().endsWith('/sso/session') && response.request().method() === 'POST',
       { timeout })
