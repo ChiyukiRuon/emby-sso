@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>EmbySso</AssemblyName>
+        <Version>0.1.0</Version>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="MediaBrowser.Server.Core" Version="4.10.0.24-beta2" ExcludeAssets="runtime" />
+        <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.14.0" />
+        <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.48" PrivateAssets="all" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Web/*" />
+    </ItemGroup>
+</Project>

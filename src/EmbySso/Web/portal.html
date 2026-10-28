@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>登录 Emby</title>
+    <link rel="stylesheet" href="{{BASE}}/sso/assets/portal.css">
+    <script defer src="{{BASE}}/sso/assets/portal.js"></script>
+</head>
+<body>
+    <main>
+        <p class="eyebrow">EMBY · SINGLE SIGN-ON</p>
+        <h1>你的媒体，一个账号。</h1>
+        <p>通过统一身份账号登录。首次使用时，将按管理员设置创建 Emby 账号。</p>
+        <form method="post" action="{{BASE}}/sso/start">
+            <input type="hidden" name="Csrf">
+            <input type="hidden" name="Action" value="login">
+            <button type="submit">通过 SSO 登录</button>
+        </form>
+        <p>绑定或解绑 SSO：请先登录 Emby，然后前往个人配置页面。</p>
+        <p class="footnote"><a href="{{BASE}}/web/index.html">使用 Emby 原有登录方式</a></p>
+        <noscript>请启用 JavaScript 后刷新此页面。</noscript>
+    </main>
+    <script id="bootstrap" type="application/json">{{DATA}}</script>
+</body>
+</html>

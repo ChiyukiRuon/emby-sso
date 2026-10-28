@@ -1,0 +1,30 @@
+<div id="rauthySsoConfig" is="emby-scroller" class="view flex flex-direction-column scrollFrameY flex-grow"
+     data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true"
+     data-title="Rauthy SSO" data-controller="__plugin/rauthyssojs">
+    <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+        <form class="ssoConfigForm auto-center">
+            <div class="verticalSection verticalSection-extrabottompadding">
+                <div class="sectionTitleContainer flex align-items-center"><h2 class="sectionTitle">Rauthy SSO</h2></div>
+                <p>使用标准 OIDC 登录。管理员和普通用户都可以绑定 SSO；新账号默认没有媒体库访问权限。</p>
+                <p id="ssoStatus" role="status" aria-live="polite"></p>
+                <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ssoEnabled"><span>启用 SSO</span></label>
+                <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ssoAllowInsecure"><span>允许不安全 HTTP（仅测试/可信内网）</span></label>
+                <div class="fieldDescription">启用后 PublicUrl、Issuer 和 OIDC 端点可以使用 http://。授权码、Token 和 Emby AccessToken 会明文传输；Rauthy 客户端也必须允许 http Redirect URI。生产环境请保持关闭。</div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoPublicUrl">Emby 公开地址</label><input is="emby-input" id="ssoPublicUrl" type="url" required placeholder="https://emby.example.com"><div class="fieldDescription">通常使用 HTTPS；启用上面的不安全 HTTP 选项后也可以使用 http://。包含反向代理的路径前缀，不含 /web。登录入口为此地址后加 /sso。</div></div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoIssuer">Rauthy Issuer</label><input is="emby-input" id="ssoIssuer" type="url" required placeholder="https://auth.example.com/auth/v1/"><div class="fieldDescription">必须与发现文档中的 issuer 完全一致，包括末尾斜杠。Rauthy 客户端的 ID Token Algorithm 使用 RS256、RS384 或 RS512（建议 RS256），不支持 EdDSA。</div></div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoDiscovery">发现文档地址（可选）</label><input is="emby-input" id="ssoDiscovery" type="url"><div class="fieldDescription">Rauthy 可留空，默认使用 Issuer 所在域名的 /.well-known/openid-configuration。</div></div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoClientId">Client ID</label><input is="emby-input" id="ssoClientId" required autocomplete="off"></div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoSecret">Client Secret</label><input is="emby-input" id="ssoSecret" type="password" autocomplete="new-password"></div>
+                <div class="selectContainer"><label class="selectLabel" for="ssoAuth">客户端认证方式</label><select is="emby-select" id="ssoAuth"><option value="client_secret_basic">client_secret_basic（推荐）</option><option value="client_secret_post">client_secret_post</option><option value="none">无密钥的公共客户端（仍使用 PKCE）</option></select></div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoScopes">Scopes（空格分隔）</label><input is="emby-input" id="ssoScopes" required></div>
+                <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ssoAutoCreate"><span>首次 SSO 登录自动创建新用户</span></label>
+                <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ssoVerifyEmail"><span>要求已验证邮箱</span></label>
+                <div class="inputContainer"><label class="inputLabel" for="ssoClaim">访问限制：ID Token 声明名称（可选）</label><input is="emby-input" id="ssoClaim" placeholder="roles"><div class="fieldDescription">留空表示允许这个 Rauthy 客户端的全部成功认证用户。</div></div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoValue">访问限制：允许的声明值</label><input is="emby-input" id="ssoValue" placeholder="emby"></div>
+                <div class="inputContainer"><label class="inputLabel" for="ssoLibraries">新用户允许访问的媒体库 ID（逗号分隔）</label><input is="emby-input" id="ssoLibraries"><div class="fieldDescription">留空则没有媒体库权限。仅影响新账号，既有账号的权限不变。可从 Emby 媒体库管理页面的地址或 API 获取 ID。</div></div>
+                <p id="ssoCallback"></p>
+                <button is="emby-button" type="submit" class="raised button-submit block"><span>保存</span></button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <Reference Include="EmbySso"><HintPath>../../artifacts/EmbySso.dll</HintPath><Private>false</Private></Reference>
+        <PackageReference Include="MediaBrowser.Server.Core" Version="4.10.0.24-beta2" ExcludeAssets="runtime" />
+    </ItemGroup>
+</Project>

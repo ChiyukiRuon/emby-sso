@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <ProjectReference Include="../../src/EmbySso/EmbySso.csproj" />
+        <PackageReference Include="MediaBrowser.Server.Core" Version="4.10.0.24-beta2" />
+    </ItemGroup>
+</Project>
