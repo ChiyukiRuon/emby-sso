@@ -194,28 +194,15 @@ function authenticateAdmin() {
       await route.fulfill({ status: 302, headers: { location: callback.toString() } })
     })
 
-    await page.goto(publicUrl + '/sso', { waitUntil: 'domcontentloaded' })
-    await page.locator('form').filter({ has: page.locator('input[value="client-code"]') }).locator('button').click()
-    await page.waitForFunction(() => /^\d{6}$/.test(document.getElementById('login-code')?.textContent || ''))
-    if (await page.locator('#username').textContent() !== subject) throw new Error('Wrong client code account')
-    if (new URL(page.url()).search) throw new Error('OIDC callback parameters remain in URL')
-    const clientCode = await page.locator('#login-code').textContent()
-    const codeResponse = await context.request.post(publicUrl + '/Users/AuthenticateByName', {
-        headers: { 'X-Emby-Authorization': 'MediaBrowser Client="BrowserCodeTest", Device="TV", DeviceId="browser-code-tv", Version="1.0"' },
-        data: { Username: subject, Pw: clientCode }
-    })
-    if (!codeResponse.ok() || !(await codeResponse.json()).AccessToken) throw new Error('Browser code failed native login')
-    fs.mkdirSync(path.join(__dirname, '../../artifacts/screenshots'), { recursive: true })
-    await page.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/client-code-desktop.png'), animations: 'disabled' })
-    await page.setViewportSize({ width: 390, height: 844 })
-    await page.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/client-code-mobile.png'), animations: 'disabled' })
-    await page.setViewportSize({ width: 1280, height: 720 })
-    console.log('PASS browser: client code flow, clean callback URL, native password login')
+    const denied = await page.goto(publicUrl + '/sso', { waitUntil: 'domcontentloaded' })
+    if (denied.status() !== 401) throw new Error('Anonymous portal did not return 401')
+    await page.getByRole('heading', { name: '禁止访问', exact: true }).waitFor()
+    if (await page.locator('form').count()) throw new Error('Portal still has login forms')
     const sessionResponse = page.waitForResponse(
       (response) => response.url().endsWith('/sso/session') && response.request().method() === 'POST',
       { timeout })
-    await page.goto(publicUrl + '/sso', { waitUntil: 'domcontentloaded' })
-    await page.locator('form').first().locator('button[type="submit"]').click()
+    await page.goto(publicUrl + '/web/index.html#!/startup/manuallogin.html', { waitUntil: 'domcontentloaded' })
+    await page.locator('#emby-sso-login').click()
 
     let response
     try {
@@ -294,6 +281,23 @@ function authenticateAdmin() {
     await page.locator('.updatePasswordForm').waitFor({ state: 'visible' })
     if (await reminder.isVisible()) throw new Error('password reminder appeared after password change')
     console.log('PASS browser: password reminder, confirmation redirect, repeat after reload, native password change clears reminder')
+
+    await page.goto(publicUrl + '/sso', { waitUntil: 'domcontentloaded' })
+    await page.waitForFunction(() => /^\d{6}$/.test(document.getElementById('login-code')?.textContent || ''))
+    if (await page.locator('#username').textContent() !== subject) throw new Error('Wrong client code account')
+    if (new URL(page.url()).search) throw new Error('OIDC callback parameters remain in URL')
+    const clientCode = await page.locator('#login-code').textContent()
+    const codeResponse = await context.request.post(publicUrl + '/Users/AuthenticateByName', {
+        headers: { 'X-Emby-Authorization': 'MediaBrowser Client="BrowserCodeTest", Device="TV", DeviceId="browser-code-tv", Version="1.0"' },
+        data: { Username: subject, Pw: clientCode }
+    })
+    if (!codeResponse.ok() || !(await codeResponse.json()).AccessToken) throw new Error('Browser code failed native login')
+    fs.mkdirSync(path.join(__dirname, '../../artifacts/screenshots'), { recursive: true })
+    await page.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/client-code-desktop.png'), animations: 'disabled' })
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/client-code-mobile.png'), animations: 'disabled' })
+    await page.setViewportSize({ width: 1280, height: 720 })
+    console.log('PASS browser: client code flow, clean callback URL, native password login')
 
     // The plugin injects entry.js into dashboard-ui/index.html; the login view should show the button.
     const loginContext = await browser.newContext({ ignoreHTTPSErrors: true })
@@ -394,6 +398,25 @@ function authenticateAdmin() {
       await profile.locator('input').fill('SsoAdminPassword123!')
       await profile.locator('button').click()
       await adminPage.waitForFunction(() => document.querySelector('.ssoAccount')?.textContent.includes('未绑定'))
+      const pinPage = await adminContext.newPage()
+      await pinPage.goto(publicUrl + '/sso', { waitUntil: 'domcontentloaded' })
+      await pinPage.getByRole('heading', { name: '请先绑定 SSO', exact: true }).waitFor()
+      if (await pinPage.locator('#code-panel').isVisible()) throw new Error('Unbound account sees PIN panel')
+      if (!(await pinPage.locator('#gate-action').getAttribute('href')).includes('settings/profile.html'))
+        throw new Error('Missing binding action')
+      fs.mkdirSync(path.join(__dirname, '../../artifacts/screenshots'), { recursive: true })
+      await pinPage.setViewportSize({ width: 1280, height: 800 })
+      await pinPage.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/pin-unbound-desktop.png') })
+      await pinPage.setViewportSize({ width: 375, height: 812 })
+      await pinPage.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/pin-unbound-mobile.png') })
+      await pinPage.goto(publicUrl + '/sso/callback?State=invalid&Code=invalid')
+      await pinPage.locator('#error-message').waitFor()
+      if (!(await pinPage.locator('#error-message').innerText()).trim()) throw new Error('Empty fallback message')
+      await pinPage.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/fallback-mobile.png') })
+      await pinPage.setViewportSize({ width: 1280, height: 800 })
+      await pinPage.screenshot({ path: path.join(__dirname, '../../artifacts/screenshots/fallback-desktop.png') })
+      await pinPage.close()
+      console.log('PASS browser: unbound account denied with profile action; styled callback error at desktop and mobile sizes')
       await adminPage.route(issuerOrigin + '/**', async (route) => {
         const authorization = new URL(route.request().url())
         const callback = new URL(publicUrl + '/sso/callback')

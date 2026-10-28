@@ -34,6 +34,11 @@ status, _, _ = request('/sso-test/setup', {}, headers={'X-Test-Secret': os.envir
 assert status == 200, status
 
 def login(subject, action='login', username='', password=''):
+    if action == 'client-code':
+        session, _ = login(subject)
+        status, _, body = request('/sso/code', {}, headers={'X-Emby-Token': session['AccessToken']})
+        assert status == 200, (status, body)
+        return json.loads(body)
     token_headers = {}
     if action == 'link':
         status, _, body = request('/emby/Users/AuthenticateByName', {'Username': username, 'Pw': password}, headers={
@@ -42,13 +47,13 @@ def login(subject, action='login', username='', password=''):
         assert status == 200, (status, body)
         local = json.loads(body)
         token_headers = {'X-Emby-Token': local['AccessToken']}
-    status, headers, html = request('/sso/profile' if action == 'link' else '/sso', headers=token_headers)
+    status, headers, html = request('/sso/profile' if action == 'link' else '/sso/start', headers=token_headers)
     assert status == 200, (status, html)
     cookie_header = headers['Set-Cookie']
     cookie = cookie_header.split(';')[0]
     assert 'HttpOnly' in cookie_header
     assert ('Secure' in cookie_header) == public.startswith('https://')
-    csrf = (json.loads(html) if action == 'link' else bootstrap(html))['csrf']
+    csrf = json.loads(html)['csrf']
     data = {'Csrf': csrf, 'Action': action, 'Username': username, 'Password': password}
     route = '/sso/profile' if action == 'link' else '/sso/start'
     status, _, _ = request(route, data, cookie, origin='https://evil.test', headers=token_headers)
@@ -79,6 +84,11 @@ def login(subject, action='login', username='', password=''):
     status, _, body = request('/emby/Users/' + result['User']['Id'], headers={'X-Emby-Token': result['AccessToken']})
     assert status == 200, (status, body)
     return result, json.loads(body)
+
+status, _, body = request('/sso')
+assert status == 401 and 'name="Action"' not in body
+status, _, _ = request('/sso/code', {})
+assert status in (401, 403)
 
 result, user = login('new-sso-user')
 assert not user['Policy']['IsAdministrator'] and not user['Policy']['EnableAllFolders']
@@ -149,6 +159,10 @@ for password, expected in [(pending_unlink['loginCode'], 400), ('wrong-password'
     assert status == expected, (status, body)
 status, _, body = request('/sso/profile', headers=headers)
 assert not json.loads(body)['bound']
+status, _, body = request('/sso/code', {}, headers=headers)
+assert status == 403 and 'error-message' in body
+status, _, _ = request('/sso/code', {}, origin='https://evil.test', headers={'X-Emby-Token': admin['AccessToken']})
+assert status == 400
 status, _, body = request('/sso/profile', headers={'X-Emby-Token': admin['AccessToken']})
 assert json.loads(body)['bound']
 status, _, _ = native_login('existing-user', pending_unlink['loginCode'])

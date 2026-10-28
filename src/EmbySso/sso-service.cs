@@ -48,14 +48,55 @@ public sealed class SsoService : IService, IHasResultFactory
         var config = plugin.Configuration.Snapshot();
         CheckHost(config);
         plugin.Limiter.Check("page:" + Request.RemoteIp, 60);
+        // Navigation cannot carry Emby's localStorage token. This response contains no account data;
+        // portal.js must authenticate against /sso/code before anything protected is displayed.
+        Request.Response.StatusCode = 401;
+        return Page("portal.html", config, new { publicUrl = config.PublicUrl.TrimEnd('/') });
+    });
+
+    public object Get(StartInfoRequest request) => Guard(() =>
+    {
+        var config = plugin.Configuration.Snapshot();
+        CheckHost(config);
+        plugin.Limiter.Check("page:" + Request.RemoteIp, 60);
         var browser = EnsureBrowser(config);
-        var csrf = plugin.Forms.Add(browser, config.Fingerprint);
-        return Page("portal.html", config, new { csrf, publicUrl = config.PublicUrl.TrimEnd('/') });
+        Headers();
+        return Content(JsonSerializer.Serialize(new { csrf = plugin.Forms.Add(browser, config.Fingerprint) }), "application/json; charset=utf-8");
+    });
+
+    public object Post(ClientCodeRequest request) => Guard(() =>
+    {
+        var config = plugin.Configuration.Snapshot();
+        CheckPost(config);
+        var account = CurrentAccount();
+        if (!plugin.Bindings.IsBound(config.Issuer, account.Id))
+        {
+            Request.Response.StatusCode = 403;
+            return Message("请先在 Emby 个人配置页面绑定 SSO 账号，再获取客户端登录码。", config,
+                "请先绑定 SSO", "/web/index.html#!/settings/profile.html?userId=" + account.Id, "前往个人配置");
+        }
+        var user = users.GetUserById(account.Id);
+        var policy = users.GetUserPolicy(user);
+        if (!policy.EnableRemoteAccess)
+            throw new SsoException("此账号未允许远程访问，不能生成客户端登录码。");
+        if (!string.IsNullOrEmpty(policy.AuthenticationProviderId)
+            && policy.AuthenticationProviderId != CodeAuthenticationProvider.DefaultProviderId
+            && policy.AuthenticationProviderId != CodeAuthenticationProvider.ProviderId)
+            throw new SsoException("此账号使用其他认证提供器，不能启用客户端登录码。");
+        plugin.Limiter.Check("issue-code:" + account.Id, 10);
+        if (policy.AuthenticationProviderId != CodeAuthenticationProvider.ProviderId)
+        {
+            policy.AuthenticationProviderId = CodeAuthenticationProvider.ProviderId;
+            users.UpdateUserPolicy(user.InternalId, policy);
+        }
+        var loginCode = plugin.LoginCodes.Issue(account.Id, config.Fingerprint);
+        Headers();
+        return Content(JsonSerializer.Serialize(new { username = account.Name, loginCode }), "application/json; charset=utf-8");
     });
 
     public object Get(AssetRequest request) => Guard(() =>
     {
-        if (request.Name is not ("portal.js" or "finish.js" or "portal.css" or "entry.js" or "client-code.js"))
+        if (request.Name is not ("portal.js" or "finish.js" or "portal.css" or "entry.js"))
             throw new SsoException("资源不存在。");
         Headers();
         return Content(Resource(request.Name), request.Name.EndsWith(".css", StringComparison.Ordinal) ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8");
@@ -69,8 +110,8 @@ public sealed class SsoService : IService, IHasResultFactory
         plugin.Limiter.Check("start:" + Request.RemoteIp);
         var fingerprint = plugin.Forms.Take(Bounded(request.Csrf, 128), browser);
         if (fingerprint != config.Fingerprint) throw new SsoException("配置已改变，请重新打开登录页。");
-        if (request.Action is not ("login" or "client-code")) throw new SsoException("请在个人配置页面管理 SSO 绑定。");
-        var flow = new OidcFlow(config, Secrets.Random(), Secrets.Random(), null, request.Action == "client-code");
+        if (request.Action != "login") throw new SsoException("请在个人配置页面管理 SSO 绑定。");
+        var flow = new OidcFlow(config, Secrets.Random(), Secrets.Random(), null);
         var state = plugin.Flows.Add(browser, flow);
         var url = await plugin.Oidc.AuthorizationUrl(flow, state, Request.CancellationToken);
         Headers();
@@ -96,25 +137,6 @@ public sealed class SsoService : IService, IHasResultFactory
         {
             Headers();
             return ResultFactory.GetRedirectResult(config.PublicUrl.TrimEnd('/') + "/web/index.html#!/settings/profile.html?userId=" + account.Id);
-        }
-        if (flow.ClientCode)
-        {
-            var user = users.GetUserById(account.Id);
-            var policy = users.GetUserPolicy(user);
-            if (!policy.EnableRemoteAccess)
-                throw new SsoException("此账号未允许远程访问，不能生成客户端登录码。");
-            if (!string.IsNullOrEmpty(policy.AuthenticationProviderId)
-                && policy.AuthenticationProviderId != CodeAuthenticationProvider.DefaultProviderId
-                && policy.AuthenticationProviderId != CodeAuthenticationProvider.ProviderId)
-                throw new SsoException("此账号使用其他认证提供器，不能启用客户端登录码。");
-            plugin.Limiter.Check("issue-code:" + account.Id, 10);
-            if (policy.AuthenticationProviderId != CodeAuthenticationProvider.ProviderId)
-            {
-                policy.AuthenticationProviderId = CodeAuthenticationProvider.ProviderId;
-                users.UpdateUserPolicy(user.InternalId, policy);
-            }
-            var loginCode = plugin.LoginCodes.Issue(account.Id, config.Fingerprint);
-            return Page("client-code.html", config, new { username = account.Name, loginCode });
         }
         var ticket = plugin.Sessions.Add(browser, new SessionTicket(account.Id, config.Fingerprint), TimeSpan.FromSeconds(60));
         return Page("finish.html", config, new { ticket, publicUrl = config.PublicUrl.TrimEnd('/') });
@@ -271,12 +293,18 @@ public sealed class SsoService : IService, IHasResultFactory
             .Replace("{{DATA}}", JsonSerializer.Serialize(bootstrap)), "text/html; charset=utf-8");
     }
 
-    private object Message(string message, Configuration? config = null)
+    private object Message(string message, Configuration? config = null, string title = "暂时无法完成操作",
+        string target = "/web/index.html", string action = "返回 Emby")
     {
         Headers();
-        var back = config == null ? "" : "<p><a href=\"" + WebUtility.HtmlEncode(config.PublicUrl.TrimEnd('/') + "/sso") + "\">返回 SSO 登录</a></p>";
-        return Content("<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>SSO</title><body><h1>SSO</h1><p>"
-            + WebUtility.HtmlEncode(message) + "</p>" + back + "</body></html>", "text/html; charset=utf-8");
+        var baseUrl = config?.PublicUrl.TrimEnd('/') ?? "";
+        var html = Resource("error.html")
+            .Replace("{{BASE}}", WebUtility.HtmlEncode(baseUrl))
+            .Replace("{{TITLE}}", WebUtility.HtmlEncode(title))
+            .Replace("{{MESSAGE}}", WebUtility.HtmlEncode(message))
+            .Replace("{{TARGET}}", WebUtility.HtmlEncode(baseUrl + target))
+            .Replace("{{ACTION}}", WebUtility.HtmlEncode(action));
+        return Content(html, "text/html; charset=utf-8");
     }
 
     private void Headers()

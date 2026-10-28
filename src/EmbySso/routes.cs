@@ -15,6 +15,12 @@ public sealed class AssetRequest : IReturn<string>
     public string Name { get; set; } = "";
 }
 
+[Route("/sso/start", "GET"), Unauthenticated]
+public sealed class StartInfoRequest : IReturn<object>;
+
+[Route("/sso/code", "POST")]
+public sealed class ClientCodeRequest : IReturn<object>;
+
 [Route("/sso/start", "POST"), Unauthenticated]
 public sealed class StartRequest : IReturn<string>
 {

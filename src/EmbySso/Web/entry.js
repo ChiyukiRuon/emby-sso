@@ -66,6 +66,34 @@
         }
     }
 
+    function ensurePinMenu() {
+        if (isLoginPage() || !window.ApiClient || !ApiClient.getCurrentUserId()) return
+        document.querySelectorAll('.actionSheet .itemsContainer').forEach(function (container) {
+            if (container.querySelector('.ssoPinMenuItem')) return
+            var items = Array.prototype.map.call(container.querySelectorAll('.actionSheetMenuItem'), function (element) {
+                var item = container.getItemFromElement ? container.getItemFromElement(element) : null
+                return { element: element, id: item ? item.Id : element.getAttribute('data-id') }
+            })
+            // Identify the account menu by its actions, independently of Emby's display language.
+            var logout = items.find(function (item) { return item.id === 'logout' })
+            if (!logout || !items.some(function (item) { return item.id === 'settings' })) return
+            var link = document.createElement('a')
+            link.className = logout.element.className + ' ssoPinMenuItem'
+            link.href = siteBase() + '/sso'
+            link.innerHTML = logout.element.innerHTML
+            var label = link.querySelector('.actionSheetItemText')
+            if (!label) return
+            label.textContent = '生成 PIN 码'
+            var icon = link.querySelector('.md-icon')
+            if (icon) icon.textContent = 'vpn_key'
+            // Keep Emby's delegated menu handler from interpreting this as a native action.
+            link.addEventListener('click', function (event) {
+                event.stopPropagation()
+            })
+            logout.element.insertAdjacentElement('beforebegin', link)
+        })
+    }
+
     function ensureProfile() {
         var anchor = Array.prototype.find.call(document.querySelectorAll('.updatePasswordForm'), function (element) {
             return element.getClientRects().length && !element.closest('.page-hidden, .hide')
@@ -99,7 +127,7 @@
             }, options))
             if (!response.ok) {
                 var html = new DOMParser().parseFromString(await response.text(), 'text/html')
-                throw new Error(html.querySelector('p')?.textContent || '无法管理绑定，请确认已登录且 SSO 已启用，然后重试。')
+                throw new Error(html.querySelector('#error-message')?.textContent || '无法管理绑定，请确认已登录且 SSO 已启用，然后重试。')
             }
             return response.json()
         }
@@ -138,6 +166,7 @@
     function ensure() {
         ensurePasswordReminder()
         ensureProfile()
+        ensurePinMenu()
         if (!isLoginPage()) {
             if (button && button.parentNode) button.parentNode.removeChild(button)
             button = null
@@ -169,10 +198,12 @@
                 var form
                 try {
                     // Obtain the browser cookie and a one-use CSRF token without displaying the portal.
-                    var response = await fetch(siteBase() + '/sso', { credentials: 'same-origin' })
-                    var page = new DOMParser().parseFromString(await response.text(), 'text/html')
-                    if (!response.ok) throw new Error(page.querySelector('p')?.textContent || '无法启动 SSO 登录')
-                    var data = JSON.parse(page.getElementById('bootstrap').textContent)
+                    var response = await fetch(siteBase() + '/sso/start', { credentials: 'same-origin' })
+                    if (!response.ok) {
+                        var page = new DOMParser().parseFromString(await response.text(), 'text/html')
+                        throw new Error(page.querySelector('#error-message')?.textContent || '无法启动 SSO 登录')
+                    }
+                    var data = await response.json()
                     if (!currentButton.isConnected || !isLoginPage()) return
                     form = document.createElement('form')
                     form.method = 'post'

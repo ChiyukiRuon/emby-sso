@@ -1,14 +1,15 @@
 # 电脑与电视客户端登录码
 
-普通用户和管理员均可在网页完成 SSO 验证后，获取一次性登录码，在客户端密码框使用。
+已登录 Emby 且已绑定 SSO 的普通用户和管理员，均可直接获取一次性 PIN 码，在客户端密码框使用。
 
 ## 使用步骤
 
 1. 安装新版插件并重启 Emby。
-2. 手机或电脑浏览器打开 {PublicUrl}/sso，点击“获取电脑／电视客户端登录码”。
-3. 完成身份提供商登录。已有 Emby 账号需先在个人配置页绑定 SSO。
-4. 页面会显示服务器地址、Emby 用户名和 **6 位数字登录码**。
-5. 电脑或电视客户端选择手动添加服务器，填写页面中的服务器地址、用户名，在密码框输入登录码。
+2. 在同一个浏览器中登录 Emby，并在个人配置页面绑定 SSO。
+3. 点击右上角用户头像，在菜单中选择“生成 PIN 码”（也可直接打开 `{PublicUrl}/sso`），页面验证现有登录会话后直接显示服务器地址、用户名和 **6 位 PIN 码**。
+4. 未登录或会话失效时禁止访问；未绑定时提示先绑定并提供个人配置入口。
+5. 电脑或电视客户端选择手动连接服务器，填写服务器地址、用户名，在密码栏输入 PIN 码。
+6. 需要新码时点击“重新生成 PIN 码”；旧码立即失效。
 
 这是本地 Emby 用户名／密码登录，不是 Emby Connect PIN 登录；不要将登录码输入 Emby Connect 页面。用户名使用页面显示的 Emby 用户名。
 
@@ -34,3 +35,5 @@
 尚未在具体品牌电视或桌面原生 App 上手工验证。客户端必须把密码通过标准认证接口提交，并保存返回的 Emby 会话；仅支持 Emby Connect 或仅提交旧式密码摘要的客户端不在支持范围。
 
 实现依据 Emby 官方 [IAuthenticationProvider](https://dev.emby.media/reference/pluginapi/MediaBrowser.Controller.Authentication.IAuthenticationProvider.html)、[IRequiresResolvedUser](https://dev.emby.media/reference/pluginapi/MediaBrowser.Controller.Authentication.IRequiresResolvedUser.html) 与 [IApplicationHost](https://dev.emby.media/reference/pluginapi/MediaBrowser.Common.IApplicationHost.html) 接口；版本行为以隔离集成测试为准。
+
+直接导航 `/sso` 返回不包含凭据或 PIN 的 401 验证页面。浏览器读取当前服务器的已有会话，通过需要 Emby 身份验证的 `POST /sso/code` 获取 PIN；接口同时验证来源和绑定状态。Emby 登录页的 SSO 按钮使用独立的 `/sso/start` 接口。

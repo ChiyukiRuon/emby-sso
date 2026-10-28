@@ -6,7 +6,7 @@
 
 - 电脑／电视客户端一次性登录码：6 位数字、5 分钟有效、本地密码保留
 
-- `/sso` 登录入口，使用 Authorization Code + PKCE（S256）
+- Emby 登录页的 SSO 按钮使用 Authorization Code + PKCE（S256）；`/sso` 为已登录且已绑定账号展示客户端 PIN 码
 - 在 Emby 登录页和手动登录页显示“使用 SSO 登录”按钮
 - 首次 SSO 登录可自动创建受限的 Emby 用户
 - 支持把 SSO 身份绑定到已有 Emby 账号，保留观看记录和权限
@@ -103,7 +103,7 @@ https://auth.example.com/.well-known/openid-configuration
 | --- | --- |
 | 启用 SSO | 关闭后 `/sso` 不可用 |
 | 允许不安全 HTTP | 仅测试/可信内网使用。允许 PublicUrl、Issuer、发现文档和 OIDC 端点使用 `http://`；Token 和 Emby AccessToken 会明文传输 |
-| Emby 公开地址 | 默认必须是 HTTPS 地址，可包含反向代理路径前缀，不含 `/web`；登录入口为此地址加 `/sso`。启用不安全 HTTP 后也可以是 `http://` |
+| Emby 公开地址 | 默认必须是 HTTPS 地址，可包含反向代理路径前缀，不含 `/web`；客户端 PIN 码页面为此地址加 `/sso`。启用不安全 HTTP 后也可以是 `http://` |
 | Rauthy Issuer | 必须与发现文档的 `issuer` 完全一致 |
 | 发现文档地址 | 可选；留空时使用 Issuer 所在域名根路径的 `/.well-known/openid-configuration` |
 | Client ID | OIDC 客户端 ID |
@@ -121,8 +121,8 @@ https://auth.example.com/.well-known/openid-configuration
 
 ## 使用
 
-1. 浏览器打开 `{PublicUrl}/sso`。
-2. 点击“通过 SSO 登录”。
+1. 浏览器打开 Emby 登录页。
+2. 点击“SSO”按钮。
 3. 首次登录时：
    - 开启自动创建：如果用户名不存在，会创建一个受限 Emby 账号并绑定。
    - 用户名已存在：先使用原账号登录 Emby，再进入个人配置页面绑定。
@@ -248,7 +248,7 @@ python scripts/run-live-test.py
 2. 构建 Release 插件和 `EmbySso.LiveHarness`（TEST ONLY）
 3. 在 18996 启动隔离 Emby，安装插件和测试 harness
 4. 运行 `tests/live-http.py`：注册、重复登录、绑定、已绑定登录、CSRF、跨浏览器回调、重放、权限
-5. 启动本地 HTTPS 代理（18997）并运行 `tests/browser/e2e.js`：真实浏览器完成 `/sso` → 假 IdP → 回调 → `finish.js` → Emby Web 自动登录；验证 Emby 登录页的 SSO 按钮；打开管理端插件配置页验证页面可见、配置能加载、未保存修改能在视图刷新后保留
+5. 启动本地 HTTPS 代理（18997）并运行 `tests/browser/e2e.js`：真实浏览器完成 Emby 登录页 → 假 IdP → 回调 → `finish.js` → Emby Web 自动登录；验证 Emby 登录页的 SSO 按钮；打开管理端插件配置页验证页面可见、配置能加载、未保存修改能在视图刷新后保留
 6. 停止 Emby，删除测试数据
 
 常用参数：
@@ -331,7 +331,7 @@ data/emby-sso/bindings.json
 | “请求来源无效” | 代理删除了 Origin；浏览器与 PublicUrl 不同源；请求体过大；HTTP 模式未勾选“允许不安全 HTTP” |
 | HTTP 模式下 Cookie 失效 | 确认已勾选并保存“允许不安全 HTTP”，PublicUrl 是 `http://...`；插件会把 Cookie 名降级为 `EmbySso` |
 | Rauthy 拒绝 HTTP Redirect URI | 在 Rauthy 客户端中允许 `http://.../sso/callback`，或改用 HTTPS；这不受插件控制 |
-| “配置已改变，请重新打开登录页” | 登录过程中管理员保存了插件配置；重新打开 `/sso` |
+| “配置已改变，请重新打开登录页” | 登录过程中管理员保存了插件配置；返回 Emby 登录页重试 |
 | “账号验证失败” | 绑定/解绑输入的 Emby 本地密码错误 |
 | “此 Emby 账号已停用” | 在 Emby 用户设置中启用该账号 |
 | “此 Emby 账号当前不在允许访问时段” | 调整该用户的访问时间表（Access Schedule） |

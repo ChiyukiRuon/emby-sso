@@ -3,28 +3,33 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>登录 Emby</title>
+    <title>客户端 PIN 码 · Emby</title>
     <link rel="stylesheet" href="{{BASE}}/sso/assets/portal.css">
     <script defer src="{{BASE}}/sso/assets/portal.js"></script>
 </head>
 <body>
-    <main>
-        <p class="eyebrow">EMBY · SINGLE SIGN-ON</p>
-        <h1>你的媒体，一个账号。</h1>
-        <p>通过统一身份账号登录。首次使用时，将按管理员设置创建 Emby 账号。</p>
-        <form method="post" action="{{BASE}}/sso/start">
-            <input type="hidden" name="Csrf">
-            <input type="hidden" name="Action" value="login">
-            <button type="submit">通过 SSO 登录</button>
-        </form>
-        <p>绑定或解绑 SSO：请先登录 Emby，然后前往个人配置页面。</p>
-        <form method="post" action="{{BASE}}/sso/start">
-            <input type="hidden" name="Csrf">
-            <input type="hidden" name="Action" value="client-code">
-            <button type="submit">获取电脑／电视客户端登录码</button>
-        </form>
-        <p class="footnote"><a href="{{BASE}}/web/index.html">使用 Emby 原有登录方式</a></p>
-        <noscript>请启用 JavaScript 后刷新此页面。</noscript>
+    <main class="panel">
+        <div class="eyebrow">EMBY · CLIENT ACCESS</div>
+        <section id="gate" aria-live="polite">
+            <div class="status-icon" aria-hidden="true">!</div>
+            <h1 id="gate-title">正在验证登录状态</h1>
+            <p id="error-message">请稍候，正在检查当前账号的 SSO 绑定。</p>
+            <a class="button-link" id="gate-action" href="{{BASE}}/web/index.html" hidden>返回 Emby</a>
+        </section>
+        <section id="code-panel" hidden>
+            <h1>客户端 PIN 码</h1>
+            <p>在电脑或电视客户端手动连接服务器，将下方 PIN 码填入密码栏。</p>
+            <div class="code-box"><span class="field-label">一次性登录码</span><strong id="login-code"></strong></div>
+            <dl class="connection-details">
+                <dt>服务器</dt><dd>{{BASE}}</dd>
+                <dt>用户名</dt><dd id="username"></dd>
+            </dl>
+            <p id="expiry" role="status">5 分钟内有效，仅可使用一次。重新生成后旧码立即失效。</p>
+            <button id="refresh-code" type="button">重新生成 PIN 码</button>
+            <p class="footnote">这是 Emby 客户端的临时登录密码，请勿填入 Emby Connect 的 PIN 输入框。</p>
+            <a href="{{BASE}}/web/index.html">返回 Emby</a>
+        </section>
+        <noscript><p>禁止访问：必须启用 JavaScript 才能验证现有登录会话。</p></noscript>
     </main>
     <script id="bootstrap" type="application/json">{{DATA}}</script>
 </body>
